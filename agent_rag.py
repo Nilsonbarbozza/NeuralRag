@@ -20,8 +20,8 @@ from fastapi.staticfiles import StaticFiles
 # Load ENV
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
-agentic_api_url = "http://localhost:8000/api/v1"
-agentic_api_key = "sk-neuralsafety-enterprise-v1"
+agentic_api_url = os.getenv("NEURALSAFETY_API_URL")
+agentic_api_key = os.getenv("NEURALSAFETY_API_KEY")
 
 # Initialize Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -89,7 +89,7 @@ async def call_agentic_webfetch(url: str, force_stealth: bool = False) -> dict:
         }
         headers = {"X-API-Key": agentic_api_key}
         try:
-            response = await client.post(f"{agentic_api_url}/fetch", json=payload, headers=headers)
+            response = await client.post(f"{agentic_api_url}/api/v1/fetch", json=payload, headers=headers)
             response.raise_for_status()
             return response.json()
         except Exception as e:
