@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuralSafety | Enterprise RAG Agent</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #05070a;
+            --glass-bg: rgba(15, 20, 30, 0.7);
+            --accent-color: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.4);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --user-bubble: #1e293b;
+            --bot-bubble: rgba(30, 41, 59, 0.5);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 40%);
+        }
+
+        /* --- Header --- */
+        header {
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+            z-index: 10;
+        }
+
+        .logo {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            font-size: 1.5rem;
+            letter-spacing: -0.5px;
+            background: linear-gradient(to right, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 99px;
+            background: rgba(34, 197, 94, 0.1);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #22c55e;
+        }
+
+        /* --- Sidebar / Controls --- */
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 300px;
+            padding: 2rem;
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            background: rgba(2, 4, 8, 0.4);
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .control-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        select, input {
+            background: var(--user-bubble);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.75rem;
+            border-radius: 8px;
+            width: 100%;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--accent-color);
+        }
+
+        /* --- Chat Area --- */
+        .chat-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        #chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            scroll-behavior: smooth;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 1rem 1.25rem;
+            border-radius: 16px;
+            line-height: 1.6;
+            font-size: 0.95rem;
+            position: relative;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            align-self: flex-end;
+            background: var(--accent-color);
+            color: white;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+
+        .bot-message {
+            align-self: flex-start;
+            background: var(--bot-bubble);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(5px);
+            border-bottom-left-radius: 4px;
+        }
+
+        /* --- Input Area --- */
+        .input-area {
+            padding: 2rem;
+            background: linear-gradient(transparent, var(--bg-color));
+        }
+
+        .input-container {
+            max-width: 800px;
+            margin: 0 auto;
+            position: relative;
+            background: var(--glass-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.5rem;
+            display: flex;
+            align-items: center;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+        }
+
+        #user-input {
+            background: transparent;
+            border: none;
+            padding: 1rem;
+            flex: 1;
+            color: var(--text-primary);
+            font-size: 1rem;
+            outline: none;
+        }
+
+        .send-btn {
+            background: var(--accent-color);
+            border: none;
+            color: white;
+            padding: 0.8rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .send-btn:hover {
+            background: #4f46e5;
+            transform: scale(1.05);
+        }
+
+        .send-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Markdown-ish formatting */
+        .bot-message pre {
+            background: rgba(0,0,0,0.3);
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            overflow-x: auto;
+            font-family: 'Inter', monospace;
+            font-size: 0.85rem;
+        }
+
+        .bot-message strong {
+            color: #a5b4fc;
+        }
+
+        .loading-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .dot {
+            width: 6px;
+            height: 6px;
+            background: var(--text-secondary);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .dot:nth-child(1) { animation-delay: -0.32s; }
+        .dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            NeuralSafety
+        </div>
+        <div class="status-badge">
+            <div class="status-dot"></div>
+            Enterprise RAG Active
+        </div>
+    </header>
+
+    <div class="main-container">
+        <aside class="sidebar">
+            <div class="control-group">
+                <label class="control-label">Base de Conhecimento</label>
+                <select id="collection-select">
+                    <option value="market_ebay_strict" selected>eBay - Strict (E-commerce)</option>
+                    <option value="finlandia_strict">Finlândia - Strict (Economia)</option>
+                    <option value="trading_market_strict">Trading Economics (Market - Strict)</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label class="control-label">Session ID</label>
+                <input type="text" id="session-id" value="browser_session_01">
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 1rem 0;">
+
+            <div class="control-group" id="neural-sync-panel">
+                <label class="control-label" style="color: #818cf8;">⚡ NeuralSync (URL -> RAG)</label>
+                <input type="text" id="sync-url" placeholder="https://exemplo.com/noticia">
+                <input type="text" id="sync-collection" placeholder="Nome da Coleção (Opcional)">
+                <button class="send-btn" id="sync-btn" style="width: 100%; margin-top: 5px; background: linear-gradient(135deg, #6366f1, #a855f7);">
+                    Sincronizar Fonte
+                </button>
+                <div id="sync-status" style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 5px; display: none;">
+                    Sincronizando... 🌀
+                </div>
+            </div>
+
+            <div id="economy-widget" style="display: none; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2); padding: 1rem; border-radius: 8px; margin-top: auto;">
+                <div style="color: #4ade80; font-size: 0.7rem; text-transform: uppercase; font-weight: 600; margin-bottom: 0.25rem;">Context Economy</div>
+                <div id="economy-value" style="font-size: 1.25rem; font-weight: 600; color: #f8fafc;">0%</div>
+                <div style="color: var(--text-secondary); font-size: 0.65rem;">Saved via NeuralSummary</div>
+            </div>
+
+            <div style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.75rem;">
+                v1.0.0 | Memory Window: 6 | Summarization Active
+            </div>
+        </aside>
+
+        <main class="chat-wrapper">
+            <div id="chat-messages">
+                <div class="message bot-message">
+                    Olá! Sou o agente <strong>NeuralSafety</strong>. Escolha uma base de conhecimento ao lado e comece a perguntar. 
+                    <br><br>
+                    Estou operando com o motor <strong>GPT-4o-mini</strong> e embeddings de alta precisão.
+                </div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-container">
+                    <input type="text" id="user-input" placeholder="Pergunte algo sobre seus documentos..." autocomplete="off">
+                    <button class="send-btn" id="send-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const chatMessages = document.getElementById('chat-messages');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const collectionSelect = document.getElementById('collection-select');
+        const sessionIdInput = document.getElementById('session-id');
+
+        function addMessage(text, role) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${role === 'user' ? 'user-message' : 'bot-message'}`;
+            
+            // Basic formatting for Markdown links and strong text
+            let formattedText = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color: #60a5fa">$1</a>')
+                .replace(/\n/g, '<br>');
+            
+            msgDiv.innerHTML = formattedText;
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            addMessage(text, 'user');
+            userInput.value = '';
+
+            // 1. Criar bolha do Bot vazia
+            const botMsgDiv = document.createElement('div');
+            botMsgDiv.className = 'message bot-message';
+            botMsgDiv.innerHTML = '<div class="loading-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
+            chatMessages.appendChild(botMsgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            let fullText = "";
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionIdInput.value,
+                        message: text,
+                        collection: collectionSelect.value
+                    })
+                });
+
+                if (!response.ok) throw new Error("Falha na API");
+
+                // 2. Preparar Leitor de Stream
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                botMsgDiv.innerHTML = ""; // Limpa os pontinhos de loading
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    
+                    // Detectar Status
+                    if (chunk.includes("[STATUS]")) {
+                        const statusText = chunk.split("[STATUS]|")[1];
+                        botMsgDiv.innerHTML = `<div style="display: flex; align-items: center; gap: 8px; color: #818cf8; font-size: 0.85rem; font-style: italic;">
+                            <div class="dot" style="background: #818cf8; width: 6px; height: 6px;"></div> 
+                            ${statusText}
+                        </div>`;
+                        continue;
+                    }
+
+                    // Detectar Metadados
+                    if (chunk.includes("[METADATA]")) {
+                        const parts = chunk.split("[METADATA]|");
+                        fullText += parts[0]; 
+                        
+                        const meta = parts[1].split("|");
+                        const timeMs = meta[0];
+                        
+                        botMsgDiv.innerHTML = fullText
+                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                            .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color: #60a5fa">$1</a>')
+                            .replace(/\n/g, '<br>');
+
+                        const badge = document.createElement('div');
+                        badge.style = "font-size: 0.65rem; color: #4ade80; margin-top: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px;";
+                        badge.innerHTML = `⚡ Latência Zero: ${timeMs}ms | Coleção: ${meta[1]}`;
+                        botMsgDiv.appendChild(badge);
+                        break;
+                    }
+
+                    // Se começar a vir texto real, remove o status
+                    if (fullText === "") botMsgDiv.innerHTML = "";
+
+                    fullText += chunk;
+                    
+                    botMsgDiv.innerHTML = fullText
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color: #60a5fa">$1</a>')
+                        .replace(/\n/g, '<br>');
+                    
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+
+            } catch (err) {
+                botMsgDiv.innerHTML = `<span style="color: #ef4444">Erro Crítico: ${err.message}</span>`;
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // --- Discovery Logic ---
+        async function loadCollections() {
+            try {
+                const response = await fetch('/collections');
+                const data = await response.json();
+                const selector = document.getElementById('collection-select');
+                
+                // Pega os valores que já existem no HTML estático
+                const existingValues = Array.from(selector.options).map(opt => opt.value);
+                
+                data.collections.forEach(col => {
+                    if (!existingValues.includes(col)) {
+                        const opt = document.createElement('option');
+                        opt.value = col;
+                        opt.text = `${col.startsWith('sync_') ? col.replace('sync_', '⚡ ') : col}`;
+                        selector.appendChild(opt);
+                    }
+                });
+            } catch (err) {
+                console.error('Erro ao carregar coleções:', err);
+            }
+        }
+
+        // Carrega ao iniciar
+        loadCollections();
+
+        // --- NeuralSync Logic ---
+        const syncBtn = document.getElementById('sync-btn');
+        const syncUrl = document.getElementById('sync-url');
+        const syncColl = document.getElementById('sync-collection');
+        const syncStatus = document.getElementById('sync-status');
+
+        syncBtn.addEventListener('click', async () => {
+            const url = syncUrl.value.trim();
+            if (!url) return;
+
+            syncBtn.disabled = true;
+            syncStatus.style.display = 'block';
+            syncStatus.innerText = 'NeuralSync operando... Aguarde a clonagem matemática. 🌀';
+
+            try {
+                const response = await fetch('/ingest/url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: url,
+                        collection_name: syncColl.value.trim() || null,
+                        strict: true
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    syncStatus.innerText = `Otimização concluída! Coleção: ${data.collection} ✅`;
+                    // Adiciona a nova coleção ao seletor (agora de forma verídica)
+                    const selector = document.getElementById('collection-select');
+                    const exists = Array.from(selector.options).some(opt => opt.value === data.collection);
+                    if (!exists) {
+                        const opt = document.createElement('option');
+                        opt.value = data.collection;
+                        opt.text = `${data.collection} (Sincronizado)`;
+                        selector.appendChild(opt);
+                        // Auto-seleciona a nova coleção recém-criada
+                        selector.value = data.collection;
+                    }
+                    setTimeout(() => {
+                        syncStatus.style.display = 'none';
+                        syncBtn.disabled = false;
+                        syncUrl.value = '';
+                    }, 8000); // 8s de celebração na UI
+                } else {
+                    syncStatus.innerText = `Falha na clonagem: ${data.detail || 'Erro desconhecido'} ❌`;
+                    syncBtn.disabled = false;
+                }
+            } catch (err) {
+                syncStatus.innerText = 'Erro crítico de conexão com o Motor Neural. 🚫';
+                syncBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
