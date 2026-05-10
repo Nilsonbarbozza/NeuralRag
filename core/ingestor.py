@@ -123,7 +123,24 @@ class IngestorAgent:
             logger.error(f"❌ Falha na ingestão direta: {e}")
             raise
 
-    def ingest_dataset_file(self, file_path: str, collection_name: str) -> Dict[str, Any]:
-        # ... (keeping this for backward compatibility if needed, but the primary will be ingest_direct)
-        pass
+    def ingest_file(self, file_path: str, collection_name: str) -> Dict[str, Any]:
+        """
+        Reads a file (Markdown/Text), chunks it, and ingests into ChromaDB.
+        """
+        logger.info(f"📂 Lendo arquivo para ingestão: {file_path}")
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            
+            # Simple chunking logic (could be improved with RecursiveCharacterTextSplitter)
+            # For now, let's do a simple split to keep it lightweight
+            chunk_size = 1500
+            chunks_text = [content[i:i+chunk_size] for i in range(0, len(content), chunk_size)]
+            
+            formatted_chunks = [{"text": t, "source_url": file_path} for t in chunks_text]
+            return self.ingest_direct(formatted_chunks, collection_name=collection_name)
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao ingerir arquivo {file_path}: {e}")
+            raise
 

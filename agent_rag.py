@@ -43,7 +43,11 @@ app.add_middleware(
 )
 
 # Initialize Core Services
-rag_service = NeuralRAG(api_key=api_key)
+rag_service = NeuralRAG(
+    api_key=api_key, 
+    agentic_api_url=agentic_api_url, 
+    agentic_api_key=agentic_api_key
+)
 memory_manager = SlidingWindowMemory(client_llm=rag_service.client_llm)
 ingestor = IngestorAgent(openai_api_key=api_key)
 
@@ -80,18 +84,28 @@ class IngestResponse(BaseModel):
 # INTEGRAÇÃO COM AGENTIC API
 # ---------------------------------------------------------
 async def call_agentic_webfetch(url: str, force_stealth: bool = False) -> dict:
-    """Consome nossa API de extração purificada."""
+    """Consome API de extração purificada."""
     async with httpx.AsyncClient(timeout=60.0) as client:
         payload = {
             "url": url,
             "force_stealth": force_stealth,
-            "render_js": force_stealth
+            "render_js": force_stealth,
+            "fidelity_threshold": 0.6,
+            "archetype": "blog",
+            "include_raw": False
         }
         headers = {"X-API-Key": agentic_api_key}
         try:
             response = await client.post(f"{agentic_api_url}/api/v1/fetch", json=payload, headers=headers)
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            
+            # Estratégia de Economia: Usar chunks se markdown_body estiver vazio
+            chunks = data.get("semantic_chunks", [])
+            if chunks and not data.get("markdown_body"):
+                data["markdown_body"] = "\n\n".join([c.get("text", "") for c in chunks if c.get("text")])
+                
+            return data
         except Exception as e:
             logger.error(f"Erro ao chamar Agentic API: {e}")
             return {"markdown_body": "", "semantic_chunks": []}
@@ -101,9 +115,19 @@ async def run_neural_sync(url: str, collection: str, strict: bool):
     try:
         logging.info(f"🌀 Iniciando NeuralSync para: {url}")
         data = await call_agentic_webfetch(url, force_stealth=strict)
+        
+        # Otimização: Ingestão Direta se houver chunks semânticos
+        chunks = data.get("semantic_chunks", [])
+        if chunks:
+            formatted_chunks = [{"text": c["text"], "source_url": url} for c in chunks if "text" in c]
+            ingestor.ingest_direct(formatted_chunks, collection_name=collection)
+            return
+
+        # Fallback: Ingestão via arquivo (caso o markdown venha consolidado)
         markdown = data.get("markdown_body", "")
         if not markdown:
             return
+            
         temp_file = f"temp_ingest_{int(time.time())}.md"
         with open(temp_file, "w", encoding="utf-8") as f:
             f.write(markdown)

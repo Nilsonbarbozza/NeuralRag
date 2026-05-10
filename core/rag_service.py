@@ -17,9 +17,13 @@ class NeuralRAG:
     Enterprise-grade RAG core service.
     Handles resilient AI interactions, vector search, and context grounding.
     """
-    def __init__(self, api_key: str, chroma_path: str = None):
+    def __init__(self, api_key: str, chroma_path: str = None, agentic_api_url: str = None, agentic_api_key: str = None):
         self._api_key = api_key
         self.client_llm = AsyncOpenAI(api_key=self._api_key)
+        
+        # Configuração da Agentic API (NeuralSafety)
+        self._agentic_api_url = agentic_api_url or os.getenv("NEURALSAFETY_API_URL", "http://localhost:8000")
+        self._agentic_api_key = agentic_api_key or os.getenv("NEURALSAFETY_API_KEY", "sk-neuralsafety-enterprise-v1")
         
         # Puxa o caminho do banco da variável de ambiente (Caminho ABSOLUTO)
         raw_path = chroma_path or os.getenv("CHROMA_DB_PATH", "data/vector_db")
@@ -40,14 +44,22 @@ class NeuralRAG:
     @property
     def system_prompt(self) -> str:
         return """
-        Você é o NeuralSafety, um agente de elite especialista em RAG e Pesquisa Avançada em tempo real.
-        
-        REGRAS CRÍTICAS DE OPERAÇÃO (STRICT MODE):
-        1. Você DEVE basear sua resposta nas informações da seção "CONTEXTO EXTRAÍDO".
-        2. Se o contexto for insuficiente ou estiver VAZIO, você TEM A OBRIGAÇÃO ABSOLUTA de usar suas ferramentas de busca ('neuralsafety_search_and_fetch' para pesquisas ou 'neuralsafety_webfetch' para URLs fornecidas) ANTES de dar qualquer resposta.
-        3. Você está ESTRITAMENTE PROIBIDO de usar conhecimento prévio. Use os dados locais ou as ferramentas.
-        4. SOMENTE SE as ferramentas falharem ou não trouxerem nada, responda APENAS: "Não possuo informações suficientes no documento extraído para responder a isso."
-        5. O tom deve ser profissional, estilo consultor sênior corporativo. Nunca cite que usou ferramentas.
+        Você é o NeuralSafety, um agente de elite com "Inteligência de Ferramentas" (Tool-First Intelligence).
+        Sua missão é fornecer respostas de alta fidelidade técnica, agindo como um consultor sênior que sabe exatamente quando usar dados locais ou buscar reforço externo.
+
+        REGRAS DE OURO (DECISION TREE):
+        1. CONTEXTO LOCAL (PRIORIDADE): Sempre tente responder com a seção "CONTEXTO RECUPERADO".
+        2. GATILHOS DE FERRAMENTA (BUSCA OBRIGATÓRIA):
+           - LINKS: URLs (http/https) na pergunta exigem 'neuralsafety_webfetch'.
+           - TEMPORAL: Notícias de hoje, lançamentos, resultados esportivos ou preços atuais.
+           - DINÂMICO: Cotações, disponibilidade de planos/APIs, clima ou promoções.
+           - VERIFICAÇÃO: Medicina, legislação, finanças ou especificações técnicas de alta precisão.
+           - ENTIDADES: Dados sobre empresas, marcas, softwares ou pessoas públicas.
+           - PEDIDOS: "pesquise", "busque", "confirme no site", "veja reviews".
+        3. ZONAS DE NÃO-BUSCA (PROIBIDO USAR FERRAMENTAS):
+           - Lógica, matemática, explicações conceituais estáveis, arquitetura genérica ou escrita criativa.
+        4. RESPOSTA NEGATIVA: Se a dúvida não estiver no contexto e não se enquadrar nos gatilhos acima, informe que não possui os dados.
+        5. TOM: Corporativo, direto, sem admitir o uso de ferramentas.
         """
 
     def num_tokens_from_string(self, string: str) -> int:
@@ -179,24 +191,22 @@ Pergunta Reescrita para Busca:"""
         approved = [r for r in results if r is not None]
         return approved
 
-    async def generate_response(self, messages: List[Dict[str, str]], stream: bool = False) -> Any:
+    def get_available_tools(self) -> List[Dict[str, Any]]:
         """
-        Agentic Generation: Decides if it needs more context via WebFetch API.
+        Retorna a lista de ferramentas disponíveis para o agente.
+        Facilmente extensível por clientes ou outros módulos.
         """
-        start_gen = time.time()
-        
-        # Definição das ferramentas (Instruções Reforçadas)
-        tools = [
+        return [
             {
                 "type": "function",
                 "function": {
                     "name": "neuralsafety_webfetch",
-                    "description": "Extrai conteúdo de artigos e sites em Markdown limpo. Use SEMPRE que o usuário fornecer uma URL ou quando o contexto atual for insuficiente sobre um link específico.",
+                    "description": "EXTRAÇÃO OBRIGATÓRIA: Use SEMPRE que houver um link/URL na pergunta do usuário. Extrai conteúdo de artigos e sites em Markdown limpo para análise.",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "url": {"type": "string", "description": "URL completa."},
-                            "force_stealth": {"type": "boolean", "description": "Ativar evasão de WAF."}
+                            "url": {"type": "string", "description": "URL completa do site/artigo."},
+                            "force_stealth": {"type": "boolean", "description": "Ativar evasão de WAF (True para sites protegidos)."}
                         },
                         "required": ["url"]
                     }
@@ -206,11 +216,11 @@ Pergunta Reescrita para Busca:"""
                 "type": "function",
                 "function": {
                     "name": "neuralsafety_search_and_fetch",
-                    "description": "Ferramenta OBRIGATÓRIA para pesquisas na internet. Use SEMPRE que o usuário pedir notícias (ex: TechTudo, G1), informações recentes, eventos do mundo real ou quando o contexto atual não tiver a resposta exata.",
+                    "description": "RADAR DE BUSCA RESTRITO: Use APENAS se o usuário solicitar explicitamente uma pesquisa externa (ex: 'pesquise sobre', 'busque no Google', 'notícias de hoje'). Não use para perguntas gerais sem comando de busca.",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "query": { "type": "string", "description": "Termo de busca otimizado para motores de busca." },
+                            "query": { "type": "string", "description": "Query de busca otimizada." },
                             "force_stealth": { "type": "boolean" }
                         },
                         "required": ["query"]
@@ -218,6 +228,37 @@ Pergunta Reescrita para Busca:"""
                 }
             }
         ]
+
+    async def handle_tool_calls(self, tool_calls: List[Any]) -> List[Dict[str, str]]:
+        """
+        Processa as chamadas de ferramentas e retorna as mensagens de resposta.
+        Centraliza a lógica de execução de ferramentas.
+        """
+        import json
+        tool_messages = []
+        
+        for tool_call in tool_calls:
+            name = tool_call.function.name
+            args = json.loads(tool_call.function.arguments)
+            
+            logger.info(f"🛠️ NeuralRAG: Executando ferramenta -> {name}")
+            
+            if name == "neuralsafety_webfetch":
+                content = await self._internal_webfetch(args.get("url"), args.get("force_stealth", False))
+                tool_messages.append({"tool_call_id": tool_call.id, "role": "tool", "name": name, "content": content})
+                
+            elif name == "neuralsafety_search_and_fetch":
+                content = await self._internal_search_and_fetch(args.get("query"), args.get("force_stealth", False))
+                tool_messages.append({"tool_call_id": tool_call.id, "role": "tool", "name": name, "content": content})
+                
+        return tool_messages
+
+    async def generate_response(self, messages: List[Dict[str, str]], stream: bool = False) -> Any:
+        """
+        Agentic Generation: Decides if it needs more context via configured tools.
+        """
+        start_gen = time.time()
+        tools = self.get_available_tools()
 
         # 1ª Tentativa (Decisão de Ferramenta)
         response = await self.client_llm.chat.completions.create(
@@ -249,16 +290,8 @@ Pergunta Reescrita para Busca:"""
 
         # Caso 2: Agente QUER usar ferramentas
         messages.append(response_message)
-        for tool_call in tool_calls:
-            import json
-            if tool_call.function.name == "neuralsafety_webfetch":
-                args = json.loads(tool_call.function.arguments)
-                fetch_content = await self._internal_webfetch(args.get("url"), args.get("force_stealth", False))
-                messages.append({"tool_call_id": tool_call.id, "role": "tool", "name": tool_call.function.name, "content": fetch_content})
-            elif tool_call.function.name == "neuralsafety_search_and_fetch":
-                args = json.loads(tool_call.function.arguments)
-                fetch_content = await self._internal_search_and_fetch(args.get("query"), args.get("force_stealth", False))
-                messages.append({"tool_call_id": tool_call.id, "role": "tool", "name": tool_call.function.name, "content": fetch_content})
+        tool_results = await self.handle_tool_calls(tool_calls)
+        messages.extend(tool_results)
         
         logger.info("[PROCESS] NeuralRAG: Injetando reforco e gerando resposta final...")
 
@@ -278,34 +311,47 @@ Pergunta Reescrita para Busca:"""
             )
 
     async def _internal_webfetch(self, url: str, force_stealth: bool) -> str:
-        """Helper para bater na API interna de WebFetch (Async)."""
-        api_url = "http://localhost:8000/api/v1/fetch"
-        api_key = "sk-neuralsafety-enterprise-v1"
+        """Helper para bater na API de WebFetch (Async)."""
+        api_url = f"{self._agentic_api_url.rstrip('/')}/api/v1/fetch"
+        api_key = self._agentic_api_key
         
         logger.info(f"[FETCH] [AGENTIC RAG] Buscando reforco externo direto: {url}")
         
         try:
             import httpx
             headers = {"X-API-Key": api_key, "Content-Type": "application/json"}
-            payload = {"url": url, "force_stealth": force_stealth}
+            payload = {
+                "url": url,
+                "force_stealth": force_stealth,
+                "render_js": force_stealth,
+                "fidelity_threshold": 0.6,
+                "archetype": "blog",
+                "include_raw": False
+            }
             
             async with httpx.AsyncClient(timeout=45.0) as client:
                 res = await client.post(api_url, json=payload, headers=headers)
                 res.raise_for_status()
                 data = res.json()
                 
-                markdown = data.get("markdown_body", "")
+                # Prioritizamos semantic_chunks conforme estratégia de economia de banda
                 chunks = data.get("semantic_chunks", [])
+                if chunks:
+                    markdown = "\n\n".join([c.get("text", "") for c in chunks if c.get("text")])
+                else:
+                    markdown = data.get("markdown_body", "")
                 
-                # --- AUDITOR DE CHUNKS ---
-                print("\n" + "="*80)
-                print(f"[AUDIT] AUDITORIA DE EXTRACAO: {url}")
-                print(f"[STATS] Chunks Extraidos: {len(chunks)}")
-                print("="*80)
-                for i, chunk in enumerate(chunks[:5]):
-                    text_preview = chunk.get('text', '')[:200].replace('\n', ' ')
-                    print(f"[{i+1}] {text_preview}...")
-                print("="*80 + "\n")
+                # --- AUDITOR DE CHUNKS (Protegido contra erros de encoding) ---
+                try:
+                    logger.info(f"📊 [AUDIT] AUDITORIA DE EXTRAÇÃO: {url}")
+                    logger.info(f"📊 [STATS] Chunks Extraídos: {len(chunks)}")
+                    for i, chunk in enumerate(chunks[:5]):
+                        text_preview = chunk.get('text', '')[:200].replace('\n', ' ')
+                        # Usando ascii ignore para evitar crashes em consoles Windows
+                        safe_preview = text_preview.encode('ascii', 'ignore').decode('ascii')
+                        logger.info(f"   [{i+1}] {safe_preview}...")
+                except Exception as audit_err:
+                    logger.warning(f"⚠️ Erro ao logar auditoria: {audit_err}")
 
                 return markdown if markdown else "Conteúdo vazio ou erro na extração."
         except Exception as e:
@@ -313,16 +359,21 @@ Pergunta Reescrita para Busca:"""
             return f"Erro ao acessar fonte externa: {str(e)}"
 
     async def _internal_search_and_fetch(self, query: str, force_stealth: bool) -> str:
-        """Helper para bater na API interna de Busca e Extração (Async)."""
-        api_url = "http://localhost:8000/api/v1/search_and_fetch"
-        api_key = "sk-neuralsafety-enterprise-v1"
+        """Helper para bater na API de Busca e Extração (Async)."""
+        api_url = f"{self._agentic_api_url.rstrip('/')}/api/v1/search_and_fetch"
+        api_key = self._agentic_api_key
         
         logger.info(f"[RADAR] [AGENTIC RAG] Acionando Radar para: '{query}'")
         
         try:
             import httpx
             headers = {"X-API-Key": api_key, "Content-Type": "application/json"}
-            payload = {"query": query, "force_stealth": force_stealth}
+            payload = {
+                "query": query,
+                "force_stealth": force_stealth,
+                "fidelity_threshold": 0.6,
+                "include_raw": False
+            }
             
             async with httpx.AsyncClient(timeout=60.0) as client:
                 res = await client.post(api_url, json=payload, headers=headers)
@@ -334,6 +385,20 @@ Pergunta Reescrita para Busca:"""
                 data = res.json()
                 urls = data.get("urls_processed", [])
                 logger.info(f"[SUCCESS] Radar concluiu em {data.get('processing_ms')}ms. URLs: {urls}")
+                
+                # No search_and_fetch, os resultados podem vir em uma lista 'results'
+                results_list = data.get("results", [])
+                if results_list:
+                    consolidated = []
+                    for item in results_list:
+                        item_chunks = item.get("semantic_chunks", [])
+                        if item_chunks:
+                            item_text = "\n".join([c.get("text", "") for c in item_chunks if c.get("text")])
+                            # Limpeza básica de caracteres para segurança do log/processamento
+                            item_text = item_text.encode('utf-8', 'ignore').decode('utf-8')
+                            consolidated.append(f"--- FONTE: {item.get('url')} ---\n{item_text}")
+                    return "\n\n".join(consolidated) if consolidated else "Nenhum conteúdo semântico extraído."
+                
                 return data.get("consolidated_markdown", "Nenhum conteúdo extraído.")
         except Exception as e:
             logger.error(f"Erro no Radar Agentic: {e}")
