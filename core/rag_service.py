@@ -97,17 +97,73 @@ Nova Pergunta do Usuário: {query}
 Pergunta Reescrita para Busca:"""
 
         logger.info("🧠 NeuralRAG: Rewriting query for better retrieval...")
-        response = await self._call_llm([{"role": "user", "content": prompt_rewrite}], temperature=0.0)
+        response = await self._call_llm([{"role": "system", "content": "Você é um assistente de busca. Reescreva a pergunta do usuário para ser uma query autônoma."}, {"role": "user", "content": f"Contexto: {context_brief}\nPergunta: {query}"}], temperature=0.0)
         return response.choices[0].message.content.strip()
+
+    async def _route_intent(self, history: List[Dict[str, str]], query: str) -> Dict[str, Any]:
+        """
+        FAST INTENT ROUTER: Detects intent and explicit search commands.
+        """
+        prompt = f"""Classifique a intenção:
+- INTERNAL_RAG: Dúvidas sobre documentos/base local.
+- WEB_SEARCH: Notícias, preços atuais ou links.
+- DIRECT_LOGIC: Lógica, matemática, saudações.
+- AMBIGUOUS: Ambos.
+
+Identifique também se há um COMANDO EXPLÍCITO de busca (ex: "pesquise", "busque", "procure no google", "veja no site").
+
+Retorne APENAS JSON: 
+{{
+  "intent": "CATEGORIA", 
+  "explicit_search": true/false,
+  "reasoning": "justificativa"
+}}
+
+Pergunta: {query}"""
+        
+        logger.info("⚡ NeuralRAG: Routing intent...")
+        response = await self.client_llm.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=80,
+            temperature=0.0,
+            response_format={ "type": "json_object" }
+        )
+        import json
+        return json.loads(response.choices[0].message.content)
+
+    async def _semantic_compression(self, query: str, context: str) -> str:
+        """
+        PILLAR 2: Context Compression. 
+        Summarizes and clusters chunks to fit in the 2000 token limit without losing grounding.
+        """
+        token_count = self.num_tokens_from_string(context)
+        if token_count <= 2000:
+            return context
+
+        logger.info(f"🗜️ NeuralRAG: Compressing context ({token_count} tokens)...")
+        prompt = f"""O contexto abaixo é muito longo. Resuma e agrupe as informações por tópicos principais que respondam à pergunta: "{query}".
+Mantenha os fatos técnicos, nomes e URLs intactos. 
+Transforme em uma síntese técnica estruturada.
+
+CONTEXTO BRUTO:
+{context}"""
+        
+        response = await self.client_llm.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0
+        )
+        return response.choices[0].message.content
 
     async def retrieve(self, collection_name: str, query: str, n_results: int = 15) -> str:
         """
         Neural Gate Retrieval: 
         1. Hierarchical search (Matryoshka 512d)
         2. Tiered Filtering (Math + AI Reranking)
+        3. Semantic Compression (Pillar 2)
         """
         try:
-            # Chama o chroma persistent client (sync ok, mas o gate será async)
             collection = self.client_chroma.get_collection(name=collection_name, embedding_function=self.ef)
         except Exception as e:
             logger.error(f"Collection '{collection_name}' not found: {e}")
@@ -122,7 +178,6 @@ Pergunta Reescrita para Busca:"""
         final_chunks = []
         ambiguous_candidates = []
 
-        # --- Neural Gate Logic ---
         for i, distance in enumerate(results['distances'][0]):
             text_chunk = results['documents'][0][i]
             source_url = results['metadatas'][0][i].get('source_url', 'URL indisponível')
@@ -130,25 +185,29 @@ Pergunta Reescrita para Busca:"""
 
             if distance < 0.22:
                 final_chunks.append(enriched_content)
-                logger.info(f"[SUCCESS] NeuralGate [GREEN]: Chunk {i+1} AUTO-APPROVED")
+                logger.info(f"[SUCCESS] NeuralGate [GREEN]: Chunk {i+1} AUTO-APPROVED (Dist: {distance:.4f})")
             elif 0.22 <= distance <= 0.48:
                 ambiguous_candidates.append(enriched_content)
-                logger.info(f"[INFO] NeuralGate [YELLOW]: Chunk {i+1} ESCALATED")
+                logger.info(f"[INFO] NeuralGate [YELLOW]: Chunk {i+1} ESCALATED (Dist: {distance:.4f})")
+            else:
+                logger.warning(f"[REJECTED] NeuralGate [RED]: Chunk {i+1} BLOCKED (Dist: {distance:.4f})")
 
-        # Processamento da Zona Amarela via Neural Gate (IA)
         if ambiguous_candidates:
             validated = await self._ai_rerank_gate(query, ambiguous_candidates[:10])
             final_chunks.extend(validated)
 
+        logger.info(f"📊 [AUDIT] NEURALGATE FINAL: {len(final_chunks)} aprovados | {len(results['distances'][0]) - len(final_chunks)} descartados.")
+
         if not final_chunks:
-            # Explicitamente informa que o contexto é vazio para evitar que o LLM use conhecimento interno
             return "Vazio: O documento não contém nenhuma informação sobre este assunto."
         
-        final_context = "\n\n".join(final_chunks)
+        raw_context = "\n\n".join(final_chunks)
         
-        # Auditoria de Tokens Real-time
+        # Pillar 2: Compressão Semântica
+        final_context = await self._semantic_compression(query, raw_context)
+        
         token_count = self.num_tokens_from_string(final_context)
-        logger.info(f"[MONITOR] MONITOR DE CONTEXTO: {token_count} tokens serao enviados ao GPT.")
+        logger.info(f"[MONITOR] MONITOR DE CONTEXTO: {token_count} tokens (pós-compressão).")
         
         return final_context
 
@@ -253,62 +312,107 @@ Pergunta Reescrita para Busca:"""
                 
         return tool_messages
 
-    async def generate_response(self, messages: List[Dict[str, str]], stream: bool = False) -> Any:
+    async def generate_response(self, messages: List[Dict[str, str]], stream: bool = False, collection_name: str = None) -> Any:
         """
-        Agentic Generation: Decides if it needs more context via configured tools.
+        Phase 2: Agente de Pesquisa Enterprise com Answer Planner.
+        Fluxo: Intent Router -> [RAG/Tool] -> Answer Planner -> Synthesizer.
         """
         start_gen = time.time()
-        tools = self.get_available_tools()
-
-        # 1ª Tentativa (Decisão de Ferramenta)
-        response = await self.client_llm.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            temperature=0.1
-        )
-
-        response_message = response.choices[0].message
-        tool_calls = response_message.tool_calls
-
-        # Caso 1: Agente NÃO quer usar ferramentas (Resposta Direta)
-        if not tool_calls:
-            if not stream:
-                return {
-                    "content": response_message.content or "Não foi possível gerar uma resposta. O contexto local está vazio e o agente optou por não buscar na web.",
-                    "usage": response.usage,
-                    "time_ms": int((time.time() - start_gen) * 1000)
-                }
-            else:
-                # Simulamos um stream para a resposta direta
-                async def simple_generator():
-                    content = response_message.content or "Não foi possível gerar uma resposta. O contexto local está vazio e o agente optou por não buscar na web."
-                    yield content
-                    yield f"\n\n[METADATA]|{int((time.time() - start_gen) * 1000)}|RAG_DIRECT"
-                return simple_generator()
-
-        # Caso 2: Agente QUER usar ferramentas
-        messages.append(response_message)
-        tool_results = await self.handle_tool_calls(tool_calls)
-        messages.extend(tool_results)
+        query = messages[-1]["content"]
         
-        logger.info("[PROCESS] NeuralRAG: Injetando reforco e gerando resposta final...")
+        # 1. Fast Intent Router
+        routing = await self._route_intent(messages[:-1], query)
+        intent = routing.get("intent", "AMBIGUOUS")
+        explicit_search = routing.get("explicit_search", False)
+        logger.info(f"🎯 Intent Identificada: {intent} | Explícito: {explicit_search}")
 
-        # Chamada Final (Sync ou Stream)
+        # 2. Execução Baseada na Intenção (Prioridade Banco Vetorial)
+        context = ""
+        data_source = "Base de dados"
+        if intent in ["INTERNAL_RAG", "AMBIGUOUS"] and collection_name:
+            rewritten = await self.rewrite_query(messages[:-1], query)
+            context = await self.retrieve(collection_name, rewritten)
+            
+            # Se o banco retornar vazio e não for um comando explícito
+            if ("Vazio:" in context or "Erro:" in context) and not explicit_search:
+                msg_fallback = "Não encontrei informações sobre este assunto na minha base de dados local. Você gostaria que eu realizasse uma **pesquisa externa** na web para encontrar essa informação?"
+                if not stream:
+                    return {"content": msg_fallback, "time_ms": int((time.time() - start_gen) * 1000), "source": "Sistema"}
+                else:
+                    async def fallback_stream():
+                        yield msg_fallback
+                        yield f"[NEURAL_META]|{int((time.time() - start_gen) * 1000)}|{collection_name}|Sistema"
+                    return fallback_stream()
+
+            # Indexar chunks para citações precisas [1], [2]...
+            indexed_context = ""
+            chunks = context.split("--- ORIGEM: ")
+            for i, chunk in enumerate(chunks):
+                if chunk.strip():
+                    indexed_context += f"[Fonte {i}] --- ORIGEM: {chunk}\n\n"
+            
+            messages.append({"role": "system", "content": f"CONTEXTO RECUPERADO (Use os IDs [Fonte X] para citar):\n{indexed_context}"})
+
+        # 3. Decisão de Ferramenta (Web Search)
+        if (intent == "WEB_SEARCH") or (intent == "AMBIGUOUS" and explicit_search) or (explicit_search):
+            tools = self.get_available_tools()
+            response = await self.client_llm.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.1
+            )
+            response_message = response.choices[0].message
+            if response_message.tool_calls:
+                data_source = "Pesquisado na Web"
+                messages.append(response_message)
+                tool_results = await self.handle_tool_calls(response_message.tool_calls)
+                messages.extend(tool_results)
+                logger.info("[PROCESS] NeuralRAG: Reforço externo injetado.")
+
+        # 4. NeuralSafety Unified Prompt (Gemini-Flow)
+        unified_prompt = """
+        Siga rigorosamente este fluxo de resposta:
+        1. Inicie sua resposta com a tag <plan>.
+        2. Dentro de <plan>, descreva brevemente os tópicos que irá abordar e quais componentes (tabelas, listas) usará. Identifique quais fontes [Fonte X] usará para cada afirmação.
+        3. Feche com a tag </plan>.
+        4. Inicie a SÍNTESE FINAL imediatamente após </plan>.
+        
+        REGRAS DE DESIGN & GROUNDING:
+        - Use Headings (H2/H3) para seções.
+        - Use Citações Inline como [1], [2] baseadas no ID da fonte.
+        - Use Tabelas Markdown para dados comparativos.
+        - Mantenha um tom executivo e profissional.
+        """
+        messages.append({"role": "system", "content": unified_prompt})
+
         if not stream:
-            final_res = await self.client_llm.chat.completions.create(model="gpt-4o-mini", messages=messages)
+            final_res = await self.client_llm.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                temperature=0.3
+            )
             return {
                 "content": final_res.choices[0].message.content,
                 "usage": final_res.usage,
-                "time_ms": int((time.time() - start_gen) * 1000)
+                "time_ms": int((time.time() - start_gen) * 1000),
+                "source": data_source
             }
         else:
-            return await self.client_llm.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                stream=True
-            )
+            async def stream_wrapper():
+                res = await self.client_llm.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=messages,
+                    temperature=0.3,
+                    stream=True
+                )
+                async for chunk in res:
+                    yield chunk
+                # Injetamos metadados no final do stream
+                yield f"[NEURAL_META]|{int((time.time() - start_gen) * 1000)}|{collection_name or 'N/A'}|{data_source}"
+            
+            return stream_wrapper()
 
     async def _internal_webfetch(self, url: str, force_stealth: bool) -> str:
         """Helper para bater na API de WebFetch (Async)."""
@@ -324,7 +428,7 @@ Pergunta Reescrita para Busca:"""
                 "url": url,
                 "force_stealth": force_stealth,
                 "render_js": force_stealth,
-                "fidelity_threshold": 0.6,
+                "fidelity_threshold": 0.4,
                 "archetype": "blog",
                 "include_raw": False
             }
@@ -371,7 +475,7 @@ Pergunta Reescrita para Busca:"""
             payload = {
                 "query": query,
                 "force_stealth": force_stealth,
-                "fidelity_threshold": 0.6,
+                "fidelity_threshold": 0.4,
                 "include_raw": False
             }
             

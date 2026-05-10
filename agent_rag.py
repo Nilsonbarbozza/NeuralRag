@@ -172,45 +172,54 @@ async def chat_endpoint(request: ChatRequest):
         import asyncio
         full_response = ""
         try:
-            yield "[STATUS]|Refinando intencao de busca..."
-            history = memory_manager.get_history_for_rewriting(request.session_id)
-            optimized_query = await rag_service.rewrite_query(history, request.message)
-            
-            yield "[STATUS]|Consultando NeuralGate (Paralelo)..."
-            context = await rag_service.retrieve(request.collection, optimized_query)
-            
+            # Recupera mensagens básicas da memória (histórico + query atual)
             messages, _ = memory_manager.get_messages(
                 session_id=request.session_id,
                 system_prompt=rag_service.system_prompt,
-                context_rag=context,
+                context_rag="", # Deixamos o rag_service decidir se precisa de contexto
                 current_query=request.message
             )
             
-            yield "[STATUS]|Orquestrando resposta final..."
-            response_stream = await rag_service.generate_response(messages, stream=True)
+            yield "[STATUS]|NeuralRAG: Analisando intenção e roteando..."
+            response_stream = await rag_service.generate_response(
+                messages, 
+                stream=True, 
+                collection_name=request.collection
+            )
+            
+            # Gemini-Flow: Interceptador de Stream
+            is_planning = False
+            plan_buffer = ""
             
             async for chunk in response_stream:
                 if hasattr(chunk, 'choices') and chunk.choices and chunk.choices[0].delta.content:
                     content = chunk.choices[0].delta.content
                     full_response += content
-                    for char in content:
-                        yield char
-                        await asyncio.sleep(0.005)
-                elif isinstance(chunk, str):
-                    if "[METADATA]" in chunk:
-                        yield chunk
-                        return
-                    if "[STATUS]" in chunk:
-                        yield chunk
+                    
+                    # Lógica de Ocultação do Plano
+                    if "<plan>" in content or is_planning:
+                        is_planning = True
+                        plan_buffer += content
+                        if "</plan>" in plan_buffer:
+                            # Plano concluído, liberar o que vier depois
+                            after_plan = plan_buffer.split("</plan>")[1]
+                            if after_plan:
+                                yield after_plan
+                            is_planning = False
+                            plan_buffer = "" # Limpa para não processar mais
                         continue
-                    full_response += chunk
-                    for char in chunk:
-                        yield char
-                        await asyncio.sleep(0.005)
-
+                    
+                    if not is_planning:
+                        yield content
+                elif isinstance(chunk, str):
+                    # Se for metadado ou status, envia direto
+                    yield chunk
+            
+            # Salva a interação completa na memória
             await memory_manager.add_interaction(request.session_id, request.message, full_response)
-            total_time = int((time.time() - start_time) * 1000)
-            yield f"\n\n[METADATA]|{total_time}|{request.collection}"
+        except Exception as e:
+            logger.error(f"Stream error: {e}")
+            yield f"Erro no stream: {str(e)}"
         except Exception as e:
             logger.error(f"Stream error: {e}")
             yield f"Erro no stream: {str(e)}"

@@ -1,3 +1,7 @@
+---
+trigger: manual
+---
+
 # NeuralRAG: Arquitetura e Operação Elite
 
 Este documento define a espinha dorsal técnica, os agentes e o fluxo operacional do ecossistema **NeuralRAG**. Qualquer desvio deste padrão compromete a integridade da "Blindagem Operacional".
@@ -28,7 +32,7 @@ graph TD
     B --> C{Memória de Sessão}
     C -->|Histórico| D[Query Rewriter]
     D -->|Query Otimizada| E[Neural Gate Retrieval]
-    
+
     subgraph "Camada de Recuperação (ChromaDB)"
         E --> F[Busca Vetorial Matryoshka 512d]
         F --> G{Neural Gate Filter}
@@ -36,10 +40,10 @@ graph TD
         G -->|Amarelo 0.22-0.48| I[AI Reranker Gate]
         G -->|Vermelho > 0.48| J[Descarte]
     end
-    
+
     I -->|Validado SIM| H
     H --> K[Contexto Blindado]
-    
+
     subgraph "Ciclo de Raciocínio (GPT-4o-mini)"
         K --> L[Agentic Generation]
         L -->|Falta Info?| M[Tools: WebFetch / Search]
@@ -49,6 +53,7 @@ graph TD
 ```
 
 ### Infraestrutura Base:
+
 - **Compute:** FastAPI em ambiente containerizado.
 - **Vector DB:** ChromaDB Persistente (Caminho: `data/vector_db`).
 - **Intelligence:** Modelos OpenAI (GPT-4o-mini para lógica, text-embedding-3-small para vetores).
@@ -61,19 +66,25 @@ graph TD
 O NeuralRAG não é um RAG comum; ele utiliza algoritmos de precisão militar:
 
 ### A. Matryoshka Embeddings (512d)
+
 Utilizamos o modelo `text-embedding-3-small` otimizado para **512 dimensões**. Isso garante um equilíbrio perfeito entre velocidade de busca e precisão semântica, permitindo escala horizontal sem perda de qualidade.
 
 ### B. Neural Gate (Tiered Filtering)
+
 O filtro de entrada de contexto opera em três zonas de calor baseadas na distância vetorial:
+
 - **Zona Verde (Distância < 0.22):** Chunks com alta similaridade são aprovados automaticamente.
 - **Zona Amarela (0.22 ≤ Distância ≤ 0.48):** Chunks "suspeitos" são escalados para o **AI Reranker**.
 - **Zona Vermelha (Distância > 0.48):** Chunks irrelevantes são eliminados sumariamente para evitar "alucinação por ruído".
 
 ### C. AI Bouncer (Binary Reranking)
+
 Os candidatos da Zona Amarela são processados em **paralelo** por um classificador binário ultra-rápido que responde apenas `[SIM]` ou `[NAO]` sobre a relevância do chunk para a pergunta atual.
 
 ### D. Strict Mode (Blindagem de Conhecimento)
+
 O sistema opera sob o regime de **Strict Mode**:
+
 1. Prioridade absoluta ao contexto extraído.
 2. Proibição de uso de conhecimento prévio do modelo (evita alucinações).
 3. Uso compulsório de `neuralsafety_search_and_fetch` se o banco local estiver vazio ou insuficiente.
