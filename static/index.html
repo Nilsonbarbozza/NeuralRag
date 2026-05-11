@@ -7,21 +7,41 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #05070a;
-            --glass-bg: rgba(15, 20, 30, 0.7);
-            --accent-color: #6366f1;
-            --accent-glow: rgba(99, 102, 241, 0.4);
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --border-color: rgba(255, 255, 255, 0.1);
-            --user-bubble: #1e293b;
-            --bot-bubble: rgba(30, 41, 59, 0.5);
+            /* Default Dark Theme */
+            --bg-color: #131314;
+            --sidebar-bg: #1e1e1e;
+            --text-primary: #e3e3e3;
+            --text-secondary: #9aa0a6;
+            --accent-color: #8ab4f8;
+            --accent-bg: rgba(138, 180, 248, 0.1);
+            --border-color: #333333;
+            --user-bubble: #2d2e30;
+            --bot-bubble: transparent;
+            --input-bg: #1e1e1e;
+            --shadow: 0 4px 15px rgba(0,0,0,0.3);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body.light-theme {
+            --bg-color: #f0f4f9;
+            --sidebar-bg: #f9f9f9;
+            --text-primary: #1f1f1f;
+            --text-secondary: #5f6368;
+            --accent-color: #1a73e8;
+            --accent-bg: rgba(26, 115, 232, 0.1);
+            --border-color: #e0e0e0;
+            --user-bubble: #e8f0fe;
+            --bot-bubble: transparent;
+            --input-bg: #ffffff;
+            --shadow: 0 4px 15px rgba(0,0,0,0.05);
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-color) transparent;
         }
 
         body {
@@ -30,224 +50,292 @@
             color: var(--text-primary);
             height: 100vh;
             display: flex;
-            flex-direction: column;
+            transition: background-color 0.3s;
             overflow: hidden;
-            background-image: 
-                radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.05) 0%, transparent 40%),
-                radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 40%);
         }
 
-        /* --- Header --- */
-        header {
-            padding: 1.5rem 2rem;
+        /* --- Sidebar --- */
+        .sidebar {
+            width: 280px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
             display: flex;
-            justify-content: space-between;
+            flex-direction: column;
+            transition: var(--transition);
+            z-index: 100;
+            position: relative;
+        }
+
+        .sidebar.collapsed {
+            width: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .sidebar-header {
+            padding: 1.5rem;
+            display: flex;
             align-items: center;
-            border-bottom: 1px solid var(--border-color);
-            backdrop-filter: blur(10px);
-            z-index: 10;
+            justify-content: space-between;
         }
 
         .logo {
             font-family: 'Outfit', sans-serif;
             font-weight: 600;
-            font-size: 1.5rem;
-            letter-spacing: -0.5px;
-            background: linear-gradient(to right, #818cf8, #c084fc);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-size: 1.25rem;
+            color: var(--accent-color);
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
 
-        .status-badge {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.75rem;
-            border-radius: 99px;
-            background: rgba(34, 197, 94, 0.1);
-            color: #4ade80;
-            border: 1px solid rgba(34, 197, 94, 0.2);
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            background-color: #22c55e;
-            border-radius: 50%;
-            box-shadow: 0 0 8px #22c55e;
-        }
-
-        /* --- Sidebar / Controls --- */
-        .main-container {
-            display: flex;
+        .sidebar-content {
+            padding: 1rem;
             flex: 1;
-            overflow: hidden;
-        }
-
-        .sidebar {
-            width: 300px;
-            padding: 2rem;
-            border-right: 1px solid var(--border-color);
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 2rem;
-            background: rgba(2, 4, 8, 0.4);
+            gap: 1.5rem;
         }
 
-        .control-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-
-        .control-label {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            font-weight: 500;
+        .nav-label {
+            font-size: 0.7rem;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            padding-left: 0.5rem;
         }
 
-        select, input {
-            background: var(--user-bubble);
+        .control-item {
+            margin-bottom: 1rem;
+        }
+
+        select, input.side-input {
+            width: 100%;
+            background: transparent;
             border: 1px solid var(--border-color);
             color: var(--text-primary);
-            padding: 0.75rem;
+            padding: 0.6rem 0.8rem;
             border-radius: 8px;
-            width: 100%;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             outline: none;
-            transition: border-color 0.2s;
+            transition: var(--transition);
         }
 
-        select:focus, input:focus {
-            border-color: var(--accent-color);
+        select:hover, input.side-input:hover {
+            background: var(--accent-bg);
         }
 
-        /* --- Chat Area --- */
-        .chat-wrapper {
+        .sync-btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--accent-color);
+            color: var(--bg-color);
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: var(--transition);
+        }
+
+        .sync-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        /* --- Main Chat Area --- */
+        .main-chat {
             flex: 1;
             display: flex;
             flex-direction: column;
+            height: 100%;
             position: relative;
+        }
+
+        .top-bar {
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-color);
+        }
+
+        .icon-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        .icon-btn:hover {
+            background: var(--accent-bg);
+            color: var(--accent-color);
         }
 
         #chat-messages {
             flex: 1;
             overflow-y: auto;
-            padding: 2rem;
+            padding: 2rem 1rem;
             display: flex;
             flex-direction: column;
-            gap: 1.5rem;
-            scroll-behavior: smooth;
+            gap: 2rem;
+            max-width: 850px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .message-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
         }
 
         .message {
-            max-width: 85%;
-            padding: 1.25rem 1.5rem;
-            border-radius: 18px;
-            line-height: 1.7;
+            padding: 0.5rem 0;
+            line-height: 1.75;
             font-size: 1rem;
-            position: relative;
-            animation: fadeIn 0.3s ease-out;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            max-width: 100%;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .user-message {
+        .user-message-wrapper {
             align-self: flex-end;
-            background: var(--accent-color);
-            color: white;
-            border-bottom-right-radius: 4px;
-            box-shadow: 0 4px 15px var(--accent-glow);
+            max-width: 80%;
+            background: var(--user-bubble);
+            padding: 0.8rem 1.2rem;
+            border-radius: 18px 18px 4px 18px;
+            margin-bottom: 0.5rem;
         }
 
-        .bot-message {
+        .bot-message-wrapper {
             align-self: flex-start;
-            background: var(--bot-bubble);
-            border: 1px solid var(--border-color);
-            backdrop-filter: blur(5px);
-            border-bottom-left-radius: 4px;
+            width: 100%;
         }
 
-        /* --- Input Area --- */
-        .input-area {
-            padding: 2rem;
-            background: linear-gradient(transparent, var(--bg-color));
-        }
-
-        .input-container {
-            max-width: 800px;
-            margin: 0 auto;
-            position: relative;
-            background: var(--glass-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 0.5rem;
+        .message-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            background: var(--accent-bg);
             display: flex;
             align-items: center;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            justify-content: center;
+            color: var(--accent-color);
+            margin-bottom: 0.5rem;
+        }
+
+        /* --- Floating Input Area --- */
+        .input-area {
+            padding: 1rem 2rem 2rem 2rem;
+            background: linear-gradient(transparent, var(--bg-color) 40%);
+        }
+
+        .input-pill {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 28px;
+            padding: 8px 16px;
+            display: flex;
+            align-items: flex-end;
+            box-shadow: var(--shadow);
+            transition: border-color 0.3s;
+        }
+
+        .input-pill:focus-within {
+            border-color: var(--accent-color);
         }
 
         #user-input {
+            flex: 1;
             background: transparent;
             border: none;
-            padding: 1rem;
-            flex: 1;
             color: var(--text-primary);
+            padding: 10px 12px;
             font-size: 1rem;
             outline: none;
+            resize: none;
+            max-height: 200px;
+            min-height: 24px;
+            line-height: 1.5;
+            font-family: inherit;
         }
 
         .send-btn {
             background: var(--accent-color);
             border: none;
-            color: white;
-            padding: 0.8rem;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.2s, background 0.2s;
+            color: var(--bg-color);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
+            cursor: pointer;
+            margin-bottom: 4px;
+            transition: var(--transition);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .send-btn.active {
+            opacity: 1;
+            pointer-events: auto;
         }
 
         .send-btn:hover {
-            background: #4f46e5;
             transform: scale(1.05);
         }
 
-        .send-btn:active {
-            transform: scale(0.95);
-        }
-
-        /* Markdown-ish formatting */
-        .bot-message pre {
-            background: rgba(0,0,0,0.3);
-            padding: 1rem;
-            border-radius: 8px;
-            margin: 1rem 0;
-            overflow-x: auto;
-            font-family: 'Inter', monospace;
-            font-size: 0.85rem;
+        /* --- Components & Markdown --- */
+        .bot-message h3 {
+            color: var(--accent-color);
+            margin: 1rem 0 0.5rem 0;
+            font-size: 1.1rem;
+            line-height: 1.3;
         }
 
         .bot-message strong {
-            color: #a5b4fc;
+            color: var(--text-primary);
+            font-weight: 600;
         }
 
+        .bot-message li {
+            margin-left: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .bot-message br {
+            display: block;
+            margin: 0.5rem 0;
+            content: "";
+        }
+
+        .meta-badge {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            margin-top: 1rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--border-color);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* --- Loading --- */
         .loading-dots {
             display: flex;
             gap: 4px;
+            padding: 1rem 0;
         }
 
         .dot {
@@ -276,78 +364,89 @@
     </style>
 </head>
 <body>
-
-    <header>
-        <div class="logo">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-            NeuralSafety v2
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                NeuralSafety
+            </div>
         </div>
-        <div class="status-badge">
-            <div class="status-dot"></div>
-            Enterprise RAG Active
-        </div>
-    </header>
-
-    <div class="main-container">
-        <aside class="sidebar">
+        
+        <div class="sidebar-content">
             <div class="control-group">
-                <label class="control-label">Base de Conhecimento</label>
-                <select id="collection-select">
-                    <option value="market_ebay_strict" selected>eBay - Strict (E-commerce)</option>
-                    <option value="finlandia_strict">Finlândia - Strict (Economia)</option>
-                    <option value="trading_market_strict">Trading Economics (Market - Strict)</option>
-                </select>
+                <div class="nav-label">Base de Conhecimento</div>
+                <div class="control-item">
+                    <select id="collection-select">
+                        <option value="market_ebay_strict" selected>eBay - Strict (E-commerce)</option>
+                        <option value="finlandia_strict">Finlândia - Strict (Economia)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="nav-label">Session ID</div>
+                <div class="control-item">
+                    <input type="text" id="session-id" class="side-input" value="browser_session_01">
+                </div>
+            </div>
+
+            <div class="control-group" style="margin-top: auto;">
+                <div class="nav-label">NeuralSync (URL)</div>
+                <input type="text" id="sync-url" class="side-input" placeholder="https://..." style="margin-bottom: 0.5rem;">
+                <button class="sync-btn" onclick="syncURL()">Sincronizar Fonte</button>
+            </div>
+
+            <div style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.65rem; text-align: center;">
+                v2.0.1 | Memory Window: 6
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-chat">
+        <div class="top-bar">
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="icon-btn" id="toggle-sidebar" title="Toggle Sidebar">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                </button>
             </div>
             
-            <div class="control-group">
-                <label class="control-label">Session ID</label>
-                <input type="text" id="session-id" value="browser_session_01">
-            </div>
-
-            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 1rem 0;">
-
-            <div class="control-group" id="neural-sync-panel">
-                <label class="control-label" style="color: #818cf8;">⚡ NeuralSync (URL -> RAG)</label>
-                <input type="text" id="sync-url" placeholder="https://exemplo.com/noticia">
-                <input type="text" id="sync-collection" placeholder="Nome da Coleção (Opcional)">
-                <button class="send-btn" id="sync-btn" style="width: 100%; margin-top: 5px; background: linear-gradient(135deg, #6366f1, #a855f7);">
-                    Sincronizar Fonte
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="icon-btn" id="toggle-theme" title="Switch Theme">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
                 </button>
-                <div id="sync-status" style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 5px; display: none;">
-                    Sincronizando... 🌀
+                <div class="status-badge" style="font-size: 0.75rem; padding: 0.25rem 0.75rem; border-radius: 99px; background: var(--accent-bg); color: var(--accent-color); display: flex; align-items: center; gap: 0.4rem;">
+                    <div class="status-dot" style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 8px #22c55e;"></div>
+                    Enterprise RAG Active
                 </div>
             </div>
+        </div>
 
-            <div id="economy-widget" style="display: none; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2); padding: 1rem; border-radius: 8px; margin-top: auto;">
-                <div style="color: #4ade80; font-size: 0.7rem; text-transform: uppercase; font-weight: 600; margin-bottom: 0.25rem;">Context Economy</div>
-                <div id="economy-value" style="font-size: 1.25rem; font-weight: 600; color: #f8fafc;">0%</div>
-                <div style="color: var(--text-secondary); font-size: 0.65rem;">Saved via NeuralSummary</div>
-            </div>
-
-            <div style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.75rem;">
-                v1.0.0 | Memory Window: 6 | Summarization Active
-            </div>
-        </aside>
-
-        <main class="chat-wrapper">
-            <div id="chat-messages">
+        <div id="chat-messages">
+            <!-- Messages go here -->
+            <div class="message-container bot-message-wrapper">
+                <div class="message-avatar">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                </div>
                 <div class="message bot-message">
-                    Olá! Sou o agente <strong>NeuralSafety</strong>. Escolha uma base de conhecimento ao lado e comece a perguntar. 
-                    <br><br>
-                    Estou operando com o motor <strong>GPT-4o-mini</strong> e embeddings de alta precisão.
+                    Olá! Sou o agente <strong>NeuralSafety</strong>. Como posso ajudar com sua base de dados hoje?
                 </div>
             </div>
+        </div>
 
-            <div class="input-area">
-                <div class="input-container">
-                    <input type="text" id="user-input" placeholder="Pergunte algo sobre seus documentos..." autocomplete="off">
-                    <button class="send-btn" id="send-btn">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                    </button>
-                </div>
+        <div class="input-area">
+            <div class="input-pill">
+                <textarea id="user-input" placeholder="Pergunte algo sobre seus documentos..." rows="1"></textarea>
+                <button class="send-btn" id="send-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
             </div>
-        </main>
-    </div>
+            <div style="text-align: center; font-size: 0.65rem; color: var(--text-secondary); margin-top: 0.75rem;">
+                NeuralSafety | Socrative AI Core | Grounding Ativo
+            </div>
+        </div>
+    </main>
 
     <script>
         const chatMessages = document.getElementById('chat-messages');
@@ -355,19 +454,60 @@
         const sendBtn = document.getElementById('send-btn');
         const collectionSelect = document.getElementById('collection-select');
         const sessionIdInput = document.getElementById('session-id');
+        const sidebar = document.getElementById('sidebar');
+        const toggleSidebar = document.getElementById('toggle-sidebar');
+        const toggleTheme = document.getElementById('toggle-theme');
 
-        function addMessage(text, role) {
+        // --- Sidebar & Theme Logic ---
+        toggleSidebar.addEventListener('click', () => {
+            sidebar.classList.toggle('collapsed');
+        });
+
+        toggleTheme.addEventListener('click', () => {
+            document.body.classList.toggle('light-theme');
+            const isLight = document.body.classList.contains('light-theme');
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        });
+
+        // Restore Theme
+        if (localStorage.getItem('theme') === 'light') {
+            document.body.classList.add('light-theme');
+        }
+
+        // --- Auto-grow Textarea ---
+        userInput.addEventListener('input', () => {
+            userInput.style.height = 'auto';
+            userInput.style.height = (userInput.scrollHeight) + 'px';
+            
+            if (userInput.value.trim().length > 0) {
+                sendBtn.classList.add('active');
+            } else {
+                sendBtn.classList.remove('active');
+            }
+        });
+
+        function createMessageWrapper(role) {
+            const container = document.createElement('div');
+            container.className = `message-container ${role === 'user' ? 'user-message-wrapper' : 'bot-message-wrapper'}`;
+            
+            if (role === 'bot') {
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar';
+                avatar.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>';
+                container.appendChild(avatar);
+            }
+            
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${role === 'user' ? 'user-message' : 'bot-message'}`;
+            container.appendChild(msgDiv);
             
-            // Basic formatting for Markdown links and strong text
-            let formattedText = text
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color: #60a5fa">$1</a>')
-                .replace(/\n/g, '<br>');
-            
-            msgDiv.innerHTML = formattedText;
-            chatMessages.appendChild(msgDiv);
+            chatMessages.appendChild(container);
+            return msgDiv;
+        }
+
+        function addMessage(text, role) {
+            const msgDiv = createMessageWrapper(role);
+            msgDiv.innerHTML = formatMD(text);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
@@ -377,12 +517,11 @@
 
             addMessage(text, 'user');
             userInput.value = '';
+            userInput.style.height = 'auto';
+            sendBtn.classList.remove('active');
 
-            // 1. Criar bolha do Bot vazia
-            const botMsgDiv = document.createElement('div');
-            botMsgDiv.className = 'message bot-message';
+            const botMsgDiv = createMessageWrapper('bot');
             botMsgDiv.innerHTML = '<div class="loading-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
-            chatMessages.appendChild(botMsgDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
             let fullText = "";
@@ -400,10 +539,9 @@
 
                 if (!response.ok) throw new Error("Falha na API");
 
-                // 2. Preparar Leitor de Stream
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
-                botMsgDiv.innerHTML = ""; // Limpa os pontinhos de loading
+                botMsgDiv.innerHTML = ""; 
 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -411,17 +549,16 @@
 
                     const chunk = decoder.decode(value, { stream: true });
                     
-                    // Detectar Status
+                    // Detectar Status (Não adiciona ao fullText)
                     if (chunk.includes("[STATUS]")) {
                         const statusText = chunk.split("[STATUS]|")[1];
-                        botMsgDiv.innerHTML = `<div style="display: flex; align-items: center; gap: 8px; color: #818cf8; font-size: 0.85rem; font-style: italic;">
-                            <div class="dot" style="background: #818cf8; width: 6px; height: 6px;"></div> 
+                        botMsgDiv.innerHTML = `<div style="display: flex; align-items: center; gap: 8px; color: var(--accent-color); font-size: 0.85rem; font-style: italic; opacity: 0.8;">
+                            <div class="dot" style="background: var(--accent-color); width: 6px; height: 6px;"></div> 
                             ${statusText}
                         </div>`;
                         continue;
                     }
 
-                    // Detectar Metadados
                     if (chunk.includes("[NEURAL_META]")) {
                         const parts = chunk.split("[NEURAL_META]|");
                         fullText += parts[0]; 
@@ -431,46 +568,67 @@
                         const collection = meta[1];
                         const source = meta[2] || "Desconhecido";
                         
-                        botMsgDiv.innerHTML = fullText
-                            .replace(/### (.*?)\n/g, '<h3 style="color: #60a5fa; margin-top: 16px; margin-bottom: 8px;">$1</h3>')
-                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                            .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color: #60a5fa">$1</a>')
-                            .replace(/^\- (.*?)$/gm, '<li style="margin-left: 20px; margin-bottom: 4px;">$1</li>')
-                            .replace(/^[0-9]\. (.*?)$/gm, '<li style="margin-left: 20px; margin-bottom: 4px; list-style-type: decimal;">$1</li>')
-                            .replace(/\n\n/g, '<div style="margin-bottom: 12px;"></div>')
-                            .replace(/\n/g, '<br>');
+                        botMsgDiv.innerHTML = formatMD(fullText);
 
                         const badge = document.createElement('div');
-                        badge.style = "font-size: 0.65rem; color: #4ade80; margin-top: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px;";
+                        badge.className = 'meta-badge';
                         badge.innerHTML = `⚡ Latência Zero: ${timeMs}ms | Fonte: ${source} | Coleção: ${collection}`;
                         botMsgDiv.appendChild(badge);
                         break;
                     }
 
-                    // Se começar a vir texto real, remove o status
-                    if (fullText === "") botMsgDiv.innerHTML = "";
-
                     fullText += chunk;
-                    
-                    botMsgDiv.innerHTML = fullText
-                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                        .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color: #60a5fa">$1</a>')
-                        .replace(/\n/g, '<br>');
-                    
+                    botMsgDiv.innerHTML = formatMD(fullText);
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 }
-
             } catch (err) {
-                botMsgDiv.innerHTML = `<span style="color: #ef4444">Erro Crítico: ${err.message}</span>`;
+                botMsgDiv.innerHTML = "Erro ao processar resposta: " + err.message;
             }
         }
 
-        sendBtn.addEventListener('click', sendMessage);
+        function formatMD(text) {
+            return text
+                .replace(/### (.*?)\n/g, '<h3>$1</h3>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/^\- (.*?)$/gm, '<li>$1</li>')
+                .replace(/\n\n/g, '<br>')
+                .replace(/\n/g, '<br>')
+                .replace(/<\/li><br><li>/g, '</li><li>');
+        }
+
+        async function syncURL() {
+            const url = document.getElementById('sync-url').value;
+            if (!url) return alert("Insira uma URL");
+            
+            const btn = document.querySelector('.sync-btn');
+            btn.innerHTML = "Sincronizando...";
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+                const data = await response.json();
+                alert(data.message || data.error);
+            } catch (err) {
+                alert("Erro na sincronização");
+            } finally {
+                btn.innerHTML = "Sincronizar Fonte";
+                btn.disabled = false;
+            }
+        }
+
         userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
         });
 
-        // --- Discovery Logic ---
+        sendBtn.addEventListener('click', sendMessage);
+
         async function loadCollections() {
             try {
                 const response = await fetch('/collections');
