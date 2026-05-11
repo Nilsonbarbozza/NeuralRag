@@ -1,0 +1,19 @@
+{
+	"folders": [
+		{
+			"name": "NeuralSafety RAG Showcase",
+			"path": "c:\\Users\\Ti\\Desktop\\neuralsafety_rag_showcase"
+		},
+		{
+			"name": "Dataset Engine",
+			"path": "c:\\Users\\Ti\\Desktop\\dataset_engine"
+		}
+	],
+	"settings": {
+		"files.exclude": {
+			"**/__pycache__": true,
+			"**/.venv": true,
+			"**/.git": true
+		}
+	}
+}

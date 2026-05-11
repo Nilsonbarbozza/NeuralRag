@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import logging
+import os
 from typing import List, Dict, Tuple, Optional, Any
 
 # Setup logging
@@ -12,10 +13,14 @@ class SlidingWindowMemory:
     Enterprise Conversation Memory with Sliding Window and Active Summarization.
     Persisted in SQLite for session durability.
     """
-    def __init__(self, client_llm, db_path: str = "sessions.db", max_raw_messages: int = 6):
+    def __init__(self, client_llm, db_path: str = "sessions.db", max_raw_messages: int = None):
         self.client_llm = client_llm
-        self.max_raw_messages = max_raw_messages
         self.db_path = db_path
+
+        # Injeção dinâmica seguindo 12-Factor. Fallback seguro para 6.
+        env_limit = os.getenv("NEURAL_MAX_MEMORY_WINDOW", "6")
+        self.max_raw_messages = max_raw_messages if max_raw_messages is not None else int(env_limit)
+
         self._init_db()
 
     def _init_db(self):
@@ -40,6 +45,18 @@ class SlidingWindowMemory:
             if row:
                 return row[0], json.loads(row[1])
             return "", []
+
+    def get_session_history(self, session_id: str) -> List[Dict[str, str]]:
+        """Public method to get raw history for the UI."""
+        _, history = self._get_session_state(session_id)
+        return history
+
+    def list_all_sessions(self) -> List[str]:
+        """Returns a list of all active session IDs."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT session_id FROM sessions")
+            return [row[0] for row in cursor.fetchall()]
 
     def _save_session_state(self, session_id: str, summary_state: str, raw_history: List[Dict[str, str]]):
         """Persists the session state to the database."""

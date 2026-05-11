@@ -163,6 +163,28 @@ async def ingest_url_endpoint(request: IngestRequest, background_tasks: Backgrou
         collection=collection
     )
 
+@app.get("/sessions")
+async def list_sessions_endpoint():
+    """Retorna lista de todos os IDs de sessao persistidos."""
+    try:
+        sessions = memory_manager.list_all_sessions()
+        return {"sessions": sessions}
+    except Exception as e:
+        return {"sessions": []}
+
+@app.get("/history/{session_id}")
+async def get_history_endpoint(session_id: str):
+    """Recupera o historico bruto de uma sessao para carregar na UI."""
+    try:
+        history = memory_manager.get_session_history(session_id)
+        # Limpeza retroativa de tokens de protocolo no histórico
+        for msg in history:
+            if msg["role"] == "assistant":
+                msg["content"] = msg["content"].split("[SOCRATIC_START]")[-1].strip()
+        return {"history": history}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao recuperar historico: {e}")
+
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     """Enterprise Chat Endpoint com Streaming e Telemetria."""
@@ -212,8 +234,9 @@ async def chat_endpoint(request: ChatRequest):
                 elif isinstance(chunk, str):
                     yield chunk
             
-            # Salva a interação completa na memória
-            await memory_manager.add_interaction(request.session_id, request.message, full_response)
+            # Salva a versão limpa na memória (sem o protocolo de Chain of Thought)
+            clean_response = full_response.split("[SOCRATIC_START]")[-1].strip()
+            await memory_manager.add_interaction(request.session_id, request.message, clean_response)
         except Exception as e:
             logger.error(f"Stream error: {e}")
             yield f"Erro no stream: {str(e)}"
