@@ -344,14 +344,6 @@ CONTEXTO BRUTO:
                         yield f"[NEURAL_META]|{int((time.time() - start_gen) * 1000)}|{collection_name}|Sistema"
                     return fallback_stream()
 
-            # Indexar chunks para citações precisas [1], [2]...
-            indexed_context = ""
-            chunks = context.split("--- ORIGEM: ")
-            for i, chunk in enumerate(chunks):
-                if chunk.strip():
-                    indexed_context += f"[Fonte {i}] --- ORIGEM: {chunk}\n\n"
-            
-            messages.append({"role": "system", "content": f"CONTEXTO RECUPERADO (Use os IDs [Fonte X] para citar):\n{indexed_context}"})
 
         # 3. Decisão de Ferramenta (Web Search)
         if (intent == "WEB_SEARCH") or (intent == "AMBIGUOUS" and explicit_search) or (explicit_search):
@@ -371,20 +363,38 @@ CONTEXTO BRUTO:
                 messages.extend(tool_results)
                 logger.info("[PROCESS] NeuralRAG: Reforço externo injetado.")
 
-        # 4. NeuralSafety Unified Prompt (Gemini-Flow)
+        # 4. NeuralSafety Unified Prompt (Gemini-Flow v6 - Style & Design)
         unified_prompt = """
-        Siga rigorosamente este fluxo de resposta:
-        1. Inicie sua resposta com a tag <plan>.
-        2. Dentro de <plan>, descreva brevemente os tópicos que irá abordar e quais componentes (tabelas, listas) usará. Identifique quais fontes [Fonte X] usará para cada afirmação.
-        3. Feche com a tag </plan>.
-        4. Inicie a SÍNTESE FINAL imediatamente após </plan>.
+        VOCÊ É UM DESIGNER DE INTERFACE E CONSULTOR SENIOR. SIGA ESTE PROTOCOLO:
         
-        REGRAS DE DESIGN & GROUNDING:
-        - Use Headings (H2/H3) para seções.
-        - Use Citações Inline como [1], [2] baseadas no ID da fonte.
-        - Use Tabelas Markdown para dados comparativos.
-        - Mantenha um tom executivo e profissional.
+        SEQUÊNCIA BINÁRIA:
+        1. Comece com <plan>.
+        2. Dentro de <plan>, liste as fontes [X] e o fluxo.
+        3. Feche com </plan>.
+        4. ESCREVA O TOKEN: [SOCRATIC_START]
+        5. Comece o DIÁLOGO SOCRÁTICO formatado com o GUIA DE ESTILO abaixo.
+
+        GUIA DE ESTILO E FORMATAÇÃO (MARKDOWN UI):
+        - ANCORAGEM: Use **negrito** no conceito central ou termo principal logo no início dos parágrafos ou itens de lista. O usuário deve entender 80% do contexto apenas lendo o que está em negrito.
+        - RESPIRO: Mantenha parágrafos curtos (máx. 3-4 frases). Use quebra de linha dupla (\n\n) entre ideias.
+        - HIERARQUIA: Use `###` (H3) para transições entre capítulos da explicação. Nunca use H1 ou H2.
+        - LISTAS HÍBRIDAS: 
+            * Use numeradas (1., 2.) apenas para sequências ou passos.
+            * Use bullets (-) para características independentes. Comece cada item com o **Nome do Conceito:** seguido da explicação fluida.
+        - GROUNDING: Use citações inline [1], [2] no final das frases.
+        - TOM: Socrático, dialético, elegante e sem meta-anúncios (silêncio total).
         """
+        
+        # Indexar chunks para citações simplificadas [1], [2]...
+        indexed_context = ""
+        chunks = context.split("--- ORIGEM: ")
+        idx = 1
+        for chunk in chunks:
+            if chunk.strip():
+                indexed_context += f"Fonte [{idx}] --- ORIGEM: {chunk}\n\n"
+                idx += 1
+        
+        messages.append({"role": "system", "content": f"CONTEXTO RECUPERADO PARA CONSULTA:\n{indexed_context}"})
         messages.append({"role": "system", "content": unified_prompt})
 
         if not stream:

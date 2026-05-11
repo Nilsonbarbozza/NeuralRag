@@ -187,32 +187,29 @@ async def chat_endpoint(request: ChatRequest):
                 collection_name=request.collection
             )
             
-            # Gemini-Flow: Interceptador de Stream
-            is_planning = False
-            plan_buffer = ""
+            # Gemini-Flow v5: Interceptor Atômico
+            is_buffering = True
+            buffer = ""
             
             async for chunk in response_stream:
                 if hasattr(chunk, 'choices') and chunk.choices and chunk.choices[0].delta.content:
                     content = chunk.choices[0].delta.content
                     full_response += content
                     
-                    # Lógica de Ocultação do Plano
-                    if "<plan>" in content or is_planning:
-                        is_planning = True
-                        plan_buffer += content
-                        if "</plan>" in plan_buffer:
-                            # Plano concluído, liberar o que vier depois
-                            after_plan = plan_buffer.split("</plan>")[1]
-                            if after_plan:
-                                yield after_plan
-                            is_planning = False
-                            plan_buffer = "" # Limpa para não processar mais
+                    if is_buffering:
+                        buffer += content
+                        if "[SOCRATIC_START]" in buffer:
+                            # Token encontrado, liberar apenas o que vier depois
+                            after_token = buffer.split("[SOCRATIC_START]")[1]
+                            if after_token:
+                                yield after_token
+                            is_buffering = False
+                            buffer = "" 
                         continue
                     
-                    if not is_planning:
+                    if not is_buffering:
                         yield content
                 elif isinstance(chunk, str):
-                    # Se for metadado ou status, envia direto
                     yield chunk
             
             # Salva a interação completa na memória
